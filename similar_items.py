@@ -1,7 +1,7 @@
 from pyspark import SparkContext
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import udf, explode, col
-from pyspark.sql.types import ArrayType, StringType, DoubleType, NumberType
+from pyspark.sql.types import ArrayType, StringType, DoubleType, IntegerType
 from pyspark.ml import Pipeline
 from pyspark.ml.linalg import Vectors
 from pyspark.ml.feature import HashingTF, MinHashLSH
@@ -52,12 +52,13 @@ def shingles_to_signatures(documents):
 	return Pipeline(stages=[
 			HashingTF(inputCol='shingles', outputCol='hashes'),
 			# TODO: Implement MinHash from scratch based on course literature? 
-			MinHashLSH(inputCol='hashes', outputCol='signatures', numHashTables=numHashTables)
+			MinHashLSH(inputCol='hashes', outputCol='signature', numHashTables=numHashTables)
 		]).fit(documents).transform(documents)
 
 
 def path_to_name(file_name):
 	return file_name.split('/')[-1]
+
 
 @udf(returnType=ArrayType(StringType()))
 def paths_to_pair(file_name_1, file_name_2):
@@ -80,27 +81,37 @@ def cross_compare(documents, column_name):
 	return documents_comparison.select('pair', 'similarity')
 
 
-def generate_hash_functions(documents):
+def generate_hash_parameters(documents):
 	random.seed(22223016211)
 
 	shingle_count = documents.select(explode(documents.shingles)).distinct().count()
 	numHashTables = int(shingle_count / signature_reducing_factor) + 10
 
-	numbers = random.sample(range(0, 0xff), numHashTables)
+	numbersa = random.sample(range(0, 0xffff), numHashTables)
+	numbersb = random.sample(range(0, 0xffff), numHashTables)
+	return [[numbersa[i], numbersb[i]] for i in range(numHashTables)]
 
-	return [(lambda x: hash(x) ^ i) for i in numbers]
 
 def extract_signature(hashes, minhash_functions):
-	return hashes
+	p = minhash_functions[0]
+	result = [min([(p[0] * x + p[1]) % 723704039969 for x in hashes.indices.tolist()]) for p in minhash_functions]
+
+	print(type(result))
+	print(type(result[0]))
+
+	print(type(hashes.indices.tolist()))
+	print(type(hashes.indices.tolist()[0]))
+	return result
 
 
 def shingles_to_signature_from_scratch(documents):
 	documents_hashed = HashingTF(inputCol='shingles', outputCol='hashes').transform(documents)
-	minhash_functions = generate_hash_functions(documents)
+	minhash_params = generate_hash_parameters(documents)
 
-	signature_udf = udf(lambda hashes: extract_signature(hashes, minhash_functions), returnType=ArrayType(NumberType()))
+	signature_udf = udf(lambda hashes: extract_signature(hashes, minhash_params), returnType=ArrayType(IntegerType()))
 
 	return documents_hashed.withColumn('signature', signature_udf('hashes'))
+
 
 def main():
 	parse_arguments()
@@ -118,10 +129,12 @@ def main():
 
 	documents_hashed = shingles_to_signatures(documents_shingled)
 	documents_hashed.show()
-	documents_comparison = cross_compare(documents_hashed, 'signatures')
+	documents_comparison = cross_compare(documents_hashed, 'signature')
 	documents_comparison.show(documents_comparison.count(), False)
 
-	shingles_to_signature_from_scratch(documents_shingled)
+	documents_hashed_scratch = shingles_to_signature_from_scratch(documents_shingled)
+	documents_comparison = cross_compare(documents_hashed_scratch, 'signature')
+	documents_comparison.show(documents_comparison.count(), False)
 
 
 if __name__ == "__main__":
