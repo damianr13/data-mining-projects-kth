@@ -35,7 +35,8 @@ def parse_arguments():
 	if args.shingle_size:
 		shingle_size = int(args.shingle_size)
 	if args.signature_reducing_factor:
-		signature_reducing_factor = args.signature_reducing_factor
+		signature_reducing_factor = int(args.signature_reducing_factor)
+
 
 @udf(returnType=DoubleType())
 def compare_sets(shingles1, shingles2):
@@ -82,26 +83,20 @@ def cross_compare(documents, column_name):
 
 
 def generate_hash_parameters(documents):
-	random.seed(22223016211)
+	random.seed(22223016)
 
 	shingle_count = documents.select(explode(documents.shingles)).distinct().count()
+	print(shingle_count)
 	numHashTables = int(shingle_count / signature_reducing_factor) + 10
 
-	numbersa = random.sample(range(0, 0xffff), numHashTables)
-	numbersb = random.sample(range(0, 0xffff), numHashTables)
+	numbersa = random.sample(range(10 ** 6, 10 ** 7), numHashTables)
+	numbersb = random.sample(range(10 ** 5, 10 ** 8), numHashTables)
 	return [[numbersa[i], numbersb[i]] for i in range(numHashTables)]
 
 
 def extract_signature(hashes, minhash_functions):
 	p = minhash_functions[0]
-	result = [min([(p[0] * x + p[1]) % 723704039969 for x in hashes.indices.tolist()]) for p in minhash_functions]
-
-	print(type(result))
-	print(type(result[0]))
-
-	print(type(hashes.indices.tolist()))
-	print(type(hashes.indices.tolist()[0]))
-	return result
+	return [min([((p[0] * x + p[1]) % 653563) % 262144 for x in hashes.indices.tolist()]) for p in minhash_functions]
 
 
 def shingles_to_signature_from_scratch(documents):
@@ -133,6 +128,7 @@ def main():
 	documents_comparison.show(documents_comparison.count(), False)
 
 	documents_hashed_scratch = shingles_to_signature_from_scratch(documents_shingled)
+	documents_hashed_scratch.show()
 	documents_comparison = cross_compare(documents_hashed_scratch, 'signature')
 	documents_comparison.show(documents_comparison.count(), False)
 
