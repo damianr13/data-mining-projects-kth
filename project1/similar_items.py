@@ -1,6 +1,6 @@
 from pyspark import SparkContext
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import udf, explode, col
+from pyspark.sql.functions import udf, explode, col, arrays_overlap
 from pyspark.sql.types import ArrayType, StringType, DoubleType, IntegerType
 from pyspark.ml import Pipeline
 from pyspark.ml.linalg import Vectors
@@ -108,6 +108,28 @@ def shingles_to_signature_from_scratch(documents):
 	return documents_hashed.withColumn('signature', signature_udf('hashes'))
 
 
+def compute_lsh_single_document(signature_list, r):
+	return [hash(tuple(signature_list[i: i + r])) for i in range(0, len(signature_list), r)]
+
+
+def compute_lsh_buckets_with_band_size(documents, r):
+	lsh_udf = udf(lambda hashes: compute_lsh_single_document(hashes, r), returnType=ArrayType(IntegerType()))
+	documents_lsh = documents.withColumn('lsh', lsh_udf('signature'))
+
+	return documents_lsh.alias('a').join(documents_lsh.alias('b'), arrays_overlap("a.lsh", "b.lsh"))\
+		.withColumn('pair', paths_to_pair('a._1', 'b._1'))\
+		.where(col('pair').isNotNull())\
+		.dropDuplicates('pair')\
+		.withColumn('similarity', compare_sets('a.signature', 'b.signature'))\
+		.select('pair', 'similarity')
+
+
+def compute_lsh_buckets(documents, t):
+	r = 200
+
+	return compute_lsh_buckets_with_band_size(documents, r)
+
+
 def main():
 	parse_arguments()
 	spark_context = SparkContext("local", "Project 1 - Similar items")
@@ -131,6 +153,9 @@ def main():
 	documents_hashed_scratch.show()
 	documents_comparison = cross_compare(documents_hashed_scratch, 'signature')
 	documents_comparison.show(documents_comparison.count(), False)
+
+	documents_lsh_filtered = compute_lsh_buckets_with_bucket_size(documents_hashed_scratch, 10)
+	documents_lsh_filtered.show(documents_lsh_filtered.count(), False)
 
 
 if __name__ == "__main__":
