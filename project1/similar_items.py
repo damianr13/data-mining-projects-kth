@@ -46,7 +46,7 @@ def compare_sets(shingles1, shingles2):
 
 
 def shingles_to_signatures(documents):
-    shingle_count = documents.select(explode(documents.shingles)).distinct().count()
+    shingle_count = documents.select(explode(documents.shingles)).distinct().count() # shingle array --> rows (nice for counting shingles)
 
     numHashTables = int(shingle_count / signature_reducing_factor) + 10
     return Pipeline(stages=[
@@ -85,7 +85,7 @@ def cross_compare(documents, column_name):
 def generate_hash_parameters(documents):
     random.seed(22223016)
 
-    shingle_count = documents.select(explode(documents.shingles)).distinct().count()
+    shingle_count = documents.select(explode(documents.shingles)).distinct().count()  # shingle array --> rows (nice for counting shingles)
     print(shingle_count)
     numHashTables = int(shingle_count / signature_reducing_factor) + 10
 
@@ -144,12 +144,12 @@ def main():
     documents_comparison = cross_compare(documents_shingled, 'shingles') # creates new dataframe for jaccard similarities between documents
     documents_comparison.show(documents_comparison.count(), False) #.count() to show all rows and not truncate df
 
-    documents_hashed = shingles_to_signatures(documents_shingled)
+    documents_hashed = shingles_to_signatures(documents_shingled) # signatures using built in function
     documents_hashed.show()
     documents_comparison = cross_compare(documents_hashed, 'signature')
     documents_comparison.show(documents_comparison.count(), False)
 
-    documents_hashed_scratch = shingles_to_signature_from_scratch(documents_shingled)
+    documents_hashed_scratch = shingles_to_signature_from_scratch(documents_shingled) # signatures from scratch
     documents_hashed_scratch.show()
     documents_comparison = cross_compare(documents_hashed_scratch, 'signature')
     documents_comparison.show(documents_comparison.count(), False)
