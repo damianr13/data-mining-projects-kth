@@ -13,6 +13,7 @@ import random
 # defaults, can be set by command line arguments
 shingle_size = 10
 signature_reducing_factor = 100
+lsh_threshold = 0.95
 
 """
 *****************************************************
@@ -20,15 +21,18 @@ signature_reducing_factor = 100
 *****************************************************
 """
 def parse_arguments(): # set arguments in command line (shingle size and signature reducting factor)
-    global shingle_size, signature_reducing_factor
+    global shingle_size, signature_reducing_factor, lsh_threshold
     parser = argparse.ArgumentParser()
     parser.add_argument('--shingle-size', help="Set the size of one shingle")
     parser.add_argument('--signature-reducing-factor', help="Set the number by which the shingle count is divided to obtain signature size")
+    parser.add_argument('--lsh-threshold', help="Set the threshold value for the LSH algorithm")
     args = parser.parse_args()
     if args.shingle_size:
         shingle_size = int(args.shingle_size)
     if args.signature_reducing_factor:
         signature_reducing_factor = int(args.signature_reducing_factor)
+    if args.lsh_threshold:
+    	lsh_threshold = float(args.lsh_threshold)
 
 
 @udf(returnType=ArrayType(StringType()))
@@ -150,19 +154,16 @@ def compute_confidence(r, n):
 
 
 def search_for_r(t, n):
-	r = n
-	while compute_confidence(r, n) > t:
-		r = int(r / 2)
-
-	a = r
-	b = 2 * r
+	a = 1
+	b = n
 
 	while b > a + 1:
+		print(f'In the loop searching for: {t}')
 		r = int((a + b) / 2)
 		if compute_confidence(r, n) > t:
-			a = r
-		else:
 			b = r
+		else:
+			a = r
 
 	return r
 
@@ -200,7 +201,7 @@ def main():
     documents_comparison = cross_compare(documents_hashed_scratch, 'signature')
     documents_comparison.show(documents_comparison.count(), False)
 
-    documents_lsh_filtered = compute_lsh_buckets(documents_hashed_scratch, 0.25)
+    documents_lsh_filtered = compute_lsh_buckets(documents_hashed_scratch, lsh_threshold)
     documents_lsh_filtered.show(documents_lsh_filtered.count(), False)
 
 
