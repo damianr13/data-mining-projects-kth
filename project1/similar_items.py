@@ -1,6 +1,6 @@
 from pyspark import SparkContext
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import udf, explode, col, arrays_overlap
+from pyspark.sql.functions import udf, explode, col, arrays_overlap, size, avg
 from pyspark.sql.types import ArrayType, StringType, DoubleType, IntegerType
 from pyspark.ml import Pipeline
 from pyspark.ml.linalg import Vectors
@@ -14,17 +14,11 @@ import random
 shingle_size = 10
 signature_reducing_factor = 100
 
-
-@udf(returnType=ArrayType(StringType()))
-def shingle_single_document(text):
-    curated_text = re.sub('\s+', ' ', text.strip()) # strip each document and remove extra blanks
-
-    shingle_list = [curated_text[i:i+shingle_size] for i in range(0, len(curated_text) - shingle_size)]
-    return list(set(shingle_list))
-
-def shingle(documents):
-    return documents.withColumn('shingles', shingle_single_document("_2")) # adds a new column "shingles" to the df with shingles from each document
-
+"""
+*****************************************************
+**********Construct k-shingles***********************
+*****************************************************
+"""
 def parse_arguments(): # set arguments in command line (shingle size and signature reducting factor)
     global shingle_size, signature_reducing_factor
     parser = argparse.ArgumentParser()
@@ -37,6 +31,23 @@ def parse_arguments(): # set arguments in command line (shingle size and signatu
         signature_reducing_factor = int(args.signature_reducing_factor)
 
 
+@udf(returnType=ArrayType(StringType()))
+def shingle_single_document(text):
+    curated_text = re.sub('\s+', ' ', text.strip()) # strip each document and remove extra blanks
+
+    shingle_list = [curated_text[i:i+shingle_size] for i in range(0, len(curated_text) - shingle_size)]
+    return list(set(shingle_list))
+
+
+def shingle(documents):
+    return documents.withColumn('shingles', shingle_single_document("_2")) # adds a new column "shingles" to the df with shingles from each document
+
+
+"""
+*****************************************************
+**********Compare hashes / signatures****************
+*****************************************************
+"""
 @udf(returnType=DoubleType()) #jaccard similarity
 def compare_sets(shingles1, shingles2):
     shingles_set1 = set(shingles1)
@@ -45,6 +56,27 @@ def compare_sets(shingles1, shingles2):
     return len(shingles_set1 & shingles_set2) / len(shingles_set1 | shingles_set2)
 
 
+def cross_compare(documents, column_name):
+    documents_comparison = documents.selectExpr('_1 as name_1', column_name + ' as ' + column_name + '_1')\
+     .join(documents.selectExpr('_1 as name_2', column_name + ' as ' + column_name + '_2')) #selectExpr allows for sql expression, selecting column 1 and shingle twice to do cross comparison
+
+    # first the columns name_1 and name_2 are sorted with paths_to_pair so that we can drop duplicates
+    # compare_sets returns jaccard similarity
+    documents_comparison = documents_comparison.withColumn('pair', paths_to_pair('name_1', 'name_2'))\
+     .select('pair', column_name + '_1', column_name + '_2')\
+     .where(col('pair').isNotNull())\
+     .dropDuplicates(['pair'])\
+     .withColumn('similarity', compare_sets(column_name + '_1', column_name + '_2'))\
+     .sort(col('similarity').desc())
+
+    return documents_comparison.select('pair', 'similarity')
+
+
+"""
+*****************************************************
+*************** Compute signatures ******************
+*****************************************************
+"""
 def shingles_to_signatures(documents):
     shingle_count = documents.select(explode(documents.shingles)).distinct().count() # shingle array --> rows (nice for counting shingles)
 
@@ -64,22 +96,6 @@ def paths_to_pair(file_name_1, file_name_2):
     if file_name_1 == file_name_2:
         return None
     return sorted([path_to_name(file_name_1), path_to_name(file_name_2)])
-
-
-def cross_compare(documents, column_name):
-    documents_comparison = documents.selectExpr('_1 as name_1', column_name + ' as ' + column_name + '_1')\
-     .join(documents.selectExpr('_1 as name_2', column_name + ' as ' + column_name + '_2')) #selectExpr allows for sql expression, selecting column 1 and shingle twice to do cross comparison
-
-    # first the columns name_1 and name_2 are sorted with paths_to_pair so that we can drop duplicates
-    # compare_sets returns jaccard similarity
-    documents_comparison = documents_comparison.withColumn('pair', paths_to_pair('name_1', 'name_2'))\
-     .select('pair', column_name + '_1', column_name + '_2')\
-     .where(col('pair').isNotNull())\
-     .dropDuplicates(['pair'])\
-     .withColumn('similarity', compare_sets(column_name + '_1', column_name + '_2'))\
-     .sort(col('similarity').desc())
-
-    return documents_comparison.select('pair', 'similarity')
 
 
 def generate_hash_parameters(documents):
@@ -108,6 +124,11 @@ def shingles_to_signature_from_scratch(documents):
     return documents_hashed.withColumn('signature', signature_udf('hashes'))
 
 
+"""
+*****************************************************
+********** Compare lsh buckets **********************
+*****************************************************
+"""
 def compute_lsh_single_document(signature_list, r):
     return [hash(tuple(signature_list[i: i + r])) for i in range(0, len(signature_list), r)]
 
@@ -119,15 +140,40 @@ def compute_lsh_buckets_with_band_size(documents, r):
     return documents_lsh.alias('a').join(documents_lsh.alias('b'), arrays_overlap("a.lsh", "b.lsh"))\
      .withColumn('pair', paths_to_pair('a._1', 'b._1'))\
      .where(col('pair').isNotNull())\
-     .dropDuplicates('pair')\
+     .dropDuplicates(['pair'])\
      .withColumn('similarity', compare_sets('a.signature', 'b.signature'))\
      .select('pair', 'similarity')
 
 
-def compute_lsh_buckets(documents, t):
-    r = 200
+def compute_confidence(r, n):
+	return (r/n)**(1/r)
 
-    return compute_lsh_buckets_with_band_size(documents, r)
+
+def search_for_r(t, n):
+	r = n
+	while compute_confidence(r, n) > t:
+		r = int(r / 2)
+
+	a = r
+	b = 2 * r
+
+	while b > a + 1:
+		r = int((a + b) / 2)
+		if compute_confidence(r, n) > t:
+			a = r
+		else:
+			b = r
+
+	return r
+
+
+def compute_lsh_buckets(documents, t):
+	signature_size = documents.withColumn('signature_size', size('signature')).select('signature_size')\
+		.agg(avg('signature_size')).collect()[0][0]
+	r = search_for_r(t, int(signature_size))
+
+	print(f'Band size: {r}')
+	return compute_lsh_buckets_with_band_size(documents, r)
 
 
 def main():
@@ -154,7 +200,7 @@ def main():
     documents_comparison = cross_compare(documents_hashed_scratch, 'signature')
     documents_comparison.show(documents_comparison.count(), False)
 
-    documents_lsh_filtered = compute_lsh_buckets_with_bucket_size(documents_hashed_scratch, 10)
+    documents_lsh_filtered = compute_lsh_buckets(documents_hashed_scratch, 0.25)
     documents_lsh_filtered.show(documents_lsh_filtered.count(), False)
 
 
