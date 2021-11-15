@@ -13,7 +13,7 @@ import random
 # defaults, can be set by command line arguments
 shingle_size = 10
 signature_reducing_factor = 100
-lsh_threshold = 0.95
+lsh_threshold = 0.8
 
 """
 *****************************************************
