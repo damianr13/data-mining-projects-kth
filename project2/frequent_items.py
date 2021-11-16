@@ -1,22 +1,31 @@
 from pyspark import SparkContext
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import split, col, udf, count, array_union, size, array_except, avg, monotonically_increasing_id
+from pyspark.sql.functions import split, col, udf, count, array_union, size, array_except, avg, monotonically_increasing_id, explode, array_sort
 from pyspark.sql.types import IntegerType, BooleanType, ArrayType
 
 import argparse
 import numpy as np
+import os
+from itertools import permutations
 
 
 support_size = 2000
-
+cache_enabled = True
+confidence_threshold = 0.6
 
 def parse_arguments(): 
-	global support_size
+	global support_size, cache_enabled, confidence_threshold
 	parser = argparse.ArgumentParser()
 	parser.add_argument('--support-size', help="Set the minimum support size")
+	parser.add_argument('--disable-cache', help="Do not use cached data")
+	parser.add_argument('--confidence-threshold', help="Set the confidence_threshold")
 	args = parser.parse_args()
 	if args.support_size:
 		support_size = int(args.support_size)
+	if args.disable_cache:
+		cache_enabled = False
+	if args.confidence_threshold:
+		confidence_threshold = float(args.confidence_threshold)
 
 
 def find_last_item_id(baskets):
@@ -77,12 +86,7 @@ def gather_all_groups(helper, previous_groups, previous_group_size):
 	return previous_groups
 
 
-def main():
-	parse_arguments()
-	spark_context = SparkContext("local[*]", "Project 2 - Frequent items")
-	spark = SparkSession.builder.getOrCreate() # initializes sql related stuff
-	spark_context.setLogLevel('ERROR')
-
+def perform_operation_no_cache(spark):
 	baskets = spark.read.text('data/input.dat')
 
 	to_numeric = udf(lambda x: [int(i) for i in x if i.isnumeric()], ArrayType(IntegerType()))
@@ -104,6 +108,57 @@ def main():
 	all_supported_groups.withColumn('group_size', size(col('group'))).groupBy('group_size').agg(count(col('group_size'))).show()
 	all_supported_groups.write.mode("overwrite").format("json").save(f'data/output-{support_size}')
 
+	compute_rules_with_confidence(all_supported_groups)
+
+
+def perform_operation_cache(spark):
+	if not os.path.isdir(f'data/output-{support_size}'):
+		return perform_operation_no_cache()
+
+	results_df = spark.read.json(f'data/output-{support_size}/*.json')
+	results_df.show()
+
+	compute_rules_with_confidence(results_df)
+
+
+@udf(returnType=ArrayType(ArrayType(ArrayType(IntegerType()))))
+def find_permutations_with_split(group):
+	perms = permutations(group)
+	return [[x[0:j], x[j:len(x)]] for x in perms for j in range(1, len(x))]
+
+
+def compute_rules_with_confidence(supports):
+	rules = supports.filter(size(col('group')) >= 2)\
+		.withColumn('splitted_permutations', find_permutations_with_split(col('group')))\
+		.withColumn('perm', explode(col('splitted_permutations')))\
+		.withColumn('premise', array_sort(col('perm').getItem(0)))\
+		.withColumn('conclusion', array_sort(col('perm').getItem(1)))\
+		.select('group', 'premise', 'conclusion')\
+		.dropDuplicates()
+
+	rules = rules.alias('a').join(supports.alias('b'), on='group', how='left')\
+		.select('group', 'premise', 'conclusion', col('occurrences').alias('group_support'))
+
+	rules = rules.alias('a').join(supports.alias('b'), col('a.premise') == col('b.group'), how='left')\
+		.select(col('a.group').alias('group'), 'premise', 'conclusion', 'group_support', col('occurrences').alias('premise_support'))
+
+	rules = rules.withColumn('confidence', col('group_support') / col('premise_support'))	
+	rules.filter(col('confidence') >= confidence_threshold)\
+		.sort(col('confidence').desc())\
+		.show()	
+
+
+def main():
+	parse_arguments()
+	spark_context = SparkContext("local[*]", "Project 2 - Frequent items")
+	spark = SparkSession.builder.getOrCreate() # initializes sql related stuff
+	spark_context.setLogLevel('ERROR')
+
+	if cache_enabled:
+		perform_operation_cache(spark)
+	else:
+		perform_operation_no_cache(spark)
+	
 
 if __name__ == "__main__":
 	main()
