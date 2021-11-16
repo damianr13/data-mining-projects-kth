@@ -17,7 +17,7 @@ def parse_arguments():
 	global support_size, cache_enabled, confidence_threshold
 	parser = argparse.ArgumentParser()
 	parser.add_argument('--support-size', help="Set the minimum support size")
-	parser.add_argument('--disable-cache', help="Do not use cached data")
+	parser.add_argument('--disable-cache', help="Do not use cached data", action='store_true')
 	parser.add_argument('--confidence-threshold', help="Set the confidence_threshold")
 	args = parser.parse_args()
 	if args.support_size:
@@ -33,13 +33,6 @@ def find_last_item_id(baskets):
 	return baskets.select(find_max('items').alias('last_item')).agg({'last_item': 'max'}).collect()[0][0]
 
 
-def create_new_groups(one_item_groups, previous_groups, previous_group_size):
-	return one_item_groups.alias('one').join(previous_groups.alias('prev'))\
-		.withColumn('group_new', array_union('prev.group', 'one.group'))\
-		.selectExpr('group_new as group')\
-		.filter(size(col('group')) == previous_group_size + 1)
-
-
 def aggregate_and_filter_groups(crossed):
 	print(f'Checking for {crossed.count()} pairs. Aiming for {support_size} support!')
 	return crossed.dropDuplicates(['index', 'group']).groupBy('group').agg(count('group').alias('occurrences'))\
@@ -49,7 +42,8 @@ def aggregate_and_filter_groups(crossed):
 
 def find_supported_groups_multiple_items(helper, group_size):
 	crossed = helper.alias('a').join(helper.alias('b'), on='index', how='inner')\
-		.withColumn('group', array_union('a.group_prev', 'b.group_1'))\
+		.withColumn('group', array_sort(array_union('a.group_prev', 'b.group_1')))\
+		.dropDuplicates()\
 		.filter(size(col('group')) == group_size)\
 		.select(col('a.index').alias('index'), 
 			col('a.items').alias('items'), 
