@@ -107,7 +107,7 @@ def perform_operation_no_cache(spark):
 
 def perform_operation_cache(spark):
 	if not os.path.isdir(f'data/output-{support_size}'):
-		return perform_operation_no_cache()
+		return perform_operation_no_cache(spark)
 
 	results_df = spark.read.json(f'data/output-{support_size}/*.json')
 	results_df.show()
@@ -156,18 +156,3 @@ def main():
 
 if __name__ == "__main__":
 	main()
-
-"""
-1. [all the possible items] check if the have support s
-2. make combinations between the items in step 1
-3. make combinations with items in step 2 and the items in step 1
-3. make combinations with items in step 3 and the items in step 1
-...
- until "combinations in step n" is an empty set
-
-
-
-
-Idea: after we have the table with length one groups, we merge it with itself, so we don't associate every 
-possible group with every basket, but we build on the (basket, group) relation already known
-"""
