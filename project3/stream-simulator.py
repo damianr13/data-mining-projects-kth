@@ -20,7 +20,7 @@ class CancellationFlag:
 def sendGraphsMessages(producer, graph, index, cancellationFlag):
     while not cancellationFlag.isCancelled: # runs when flag is false
 
-        edgeIndex = min(random.randrange(0, len(graph), CONST_THREAD_COUNT) + index, len(graph) - 1)
+        edgeIndex = min(random.randrange(0, len(graph), CONST_THREAD_COUNT) + index, len(graph) - 1) # randrange(start,stop,step)
         pair = graph[edgeIndex].strip() # remove \n
         producer.send(CONST_TOPIC, value=bytes(pair, 'utf-8')) # send to Kafka port
 
@@ -40,7 +40,7 @@ def main():
 		for index in range(CONST_THREAD_COUNT):
 			x = threading.Thread(target=sendGraphsMessages, args=(producer, lines, index, cancellationFlag))
 			threads.append(x)
-			x.start()
+			x.start() # starts thread activity
 
 		command = input('Type [stop] to finish sending the messages\n')
 		while command != 'stop':
