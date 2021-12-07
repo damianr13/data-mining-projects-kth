@@ -1,8 +1,10 @@
 package se.kth.jabeja;
 
 import org.apache.log4j.Logger;
+import se.kth.jabeja.annealing.AbstractAnnealing;
 import se.kth.jabeja.config.Config;
 import se.kth.jabeja.config.NodeSelectionPolicy;
+import se.kth.jabeja.events.ColorEventListener;
 import se.kth.jabeja.io.FileIO;
 import se.kth.jabeja.rand.RandNoGenerator;
 
@@ -10,15 +12,15 @@ import java.io.File;
 import java.io.IOException;
 import java.util.*;
 
-public class Jabeja {
+public class Jabeja implements ColorEventListener {
   final static Logger logger = Logger.getLogger(Jabeja.class);
   private final Config config;
   private final HashMap<Integer/*id*/, Node/*neighbors*/> entireGraph;
   private final List<Integer> nodeIds;
   private int numberOfSwaps;
   private int round;
-  private float T;
   private boolean resultFileCreated = false;
+  private AbstractAnnealing annealing;
 
   //-------------------------------------------------------------------
   public Jabeja(HashMap<Integer, Node> graph, Config config) {
@@ -27,7 +29,7 @@ public class Jabeja {
     this.round = 0;
     this.numberOfSwaps = 0;
     this.config = config;
-    this.T = config.getTemperature();
+    this.annealing = AbstractAnnealing.fromConfig(config);
   }
 
 
@@ -42,6 +44,10 @@ public class Jabeja {
       //reduce the temperature
       saCoolDown();
       report();
+
+      if (config.getResetAnnealing() != 0 && round % config.getResetAnnealing() == 0) {
+        annealing.reset();
+      }
     }
   }
 
@@ -49,11 +55,7 @@ public class Jabeja {
    * Simulated analealing cooling function
    */
   private void saCoolDown(){
-    // TODO for second task
-    if (T > 1)
-      T -= config.getDelta();
-    if (T < 1)
-      T = 1;
+    annealing.update();
   }
 
   /**
@@ -61,33 +63,71 @@ public class Jabeja {
    * @param nodeId
    */
   private void sampleAndSwap(int nodeId) {
-    Node partner = null;
+    Node partner;
     Node nodep = entireGraph.get(nodeId);
 
+    Integer[] potentialNeighbourPartners = new Integer[0];
+    Integer[] potentialRandomPartners = new Integer[0];
     if (config.getNodeSelectionPolicy() == NodeSelectionPolicy.HYBRID
             || config.getNodeSelectionPolicy() == NodeSelectionPolicy.LOCAL) {
       // swap with random neighbors
-      // TODO
+      potentialNeighbourPartners = getNeighbors(nodep);
     }
 
     if (config.getNodeSelectionPolicy() == NodeSelectionPolicy.HYBRID
             || config.getNodeSelectionPolicy() == NodeSelectionPolicy.RANDOM) {
       // if local policy fails then randomly sample the entire graph
-      // TODO
+      potentialRandomPartners = getSample(nodeId);
     }
 
-    // swap the colors
-    // TODO
+    partner = findPartner(nodeId, potentialNeighbourPartners);
+    if (partner == null) {
+      partner = findPartner(nodeId, potentialRandomPartners);
+    }
+
+    if (partner == null) {
+      return ;
+    }
+
+    nodep.registerColorListener(this);
+    partner.registerColorListener(this);
+
+    int sourceColor = nodep.getColor();
+    nodep.setColor(partner.getColor());
+    partner.setColor(sourceColor);
+    numberOfSwaps++;
   }
 
   public Node findPartner(int nodeId, Integer[] nodes){
-
     Node nodep = entireGraph.get(nodeId);
 
     Node bestPartner = null;
     double highestBenefit = 0;
 
-    // TODO
+    for (int candidateId: nodes) {
+      Node candidate = entireGraph.get(candidateId);
+      if (candidate.getColor() == nodep.getColor()) {
+        // no exchange can be performed, skip
+        continue;
+      }
+
+      int targetDegree = getDegree(nodep, nodep.getColor());
+      int candidateDegree = getDegree(candidate, candidate.getColor());
+
+      int potentialTargetDegree = getDegree(nodep, candidate.getColor());
+      int potentialCandidateDegree = getDegree(candidate, nodep.getColor());
+
+      double oldSameColorDegree = Math.pow(targetDegree, config.getAlpha())
+              + Math.pow(candidateDegree, config.getAlpha());
+      double potentialSameColorDegree = Math.pow(potentialTargetDegree, config.getAlpha())
+              + Math.pow(potentialCandidateDegree, config.getAlpha());
+
+      if (annealing.shouldAcceptSolution(oldSameColorDegree, potentialSameColorDegree)
+              && potentialSameColorDegree > highestBenefit) {
+        bestPartner = candidate;
+        highestBenefit = potentialSameColorDegree;
+      }
+    }
 
     return bestPartner;
   }
@@ -99,6 +139,10 @@ public class Jabeja {
    * @return how many neighbors of the node have color == colorId
    */
   private int getDegree(Node node, int colorId){
+//    if (node.getNeighbourColorCount(colorId) != Node.UNKNOWN_COLOR_COUNT) {
+//      return node.getNeighbourColorCount(colorId);
+//    }
+
     int degree = 0;
     for(int neighborId : node.getNeighbours()){
       Node neighbor = entireGraph.get(neighborId);
@@ -106,6 +150,8 @@ public class Jabeja {
         degree++;
       }
     }
+
+//    node.learnColorMap(colorId, degree);
     return degree;
   }
 
@@ -227,6 +273,7 @@ public class Jabeja {
             "RNSS" + "_" + config.getRandomNeighborSampleSize() + "_" +
             "URSS" + "_" + config.getUniformRandomSampleSize() + "_" +
             "A" + "_" + config.getAlpha() + "_" +
+            annealing.key() + "_" +
             "R" + "_" + config.getRounds() + ".txt";
 
     if (!resultFileCreated) {
@@ -244,5 +291,10 @@ public class Jabeja {
     }
 
     FileIO.append(round + delimiter + (edgeCuts) + delimiter + numberOfSwaps + delimiter + migrations + "\n", outputFilePath);
+  }
+
+  @Override
+  public void notifyChangedColor(int notifiedNodeId, int oldColor, int newColor) {
+    entireGraph.get(notifiedNodeId).notifyNeighbourColorChanged(oldColor, newColor);
   }
 }

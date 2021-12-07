@@ -23,5 +23,7 @@ public class RandNoGenerator {
         return rand.nextInt(number);
     }
 
-
+    public static double nextDouble() {
+        return rand.nextDouble();
+    }
 }

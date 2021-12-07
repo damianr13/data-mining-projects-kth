@@ -13,6 +13,8 @@ public class Config {
   private GraphInitColorPolicy initColorPolicy;
   private NodeSelectionPolicy nodeSelectionPolicy;
   private Float alpha;
+  private String annealingType;
+  private int resetAnnealing;
 
   public Config setAlpha(Float alpha) {
     this.alpha = alpha;
@@ -71,6 +73,16 @@ public class Config {
 
   public Config setUniformRandSampleSize(Integer rnd_list_size) {
     this.uniformRandomSampleSize = rnd_list_size;
+    return this;
+  }
+
+  public Config setAnnealingType(String annealingType) {
+    this.annealingType = annealingType;
+    return this;
+  }
+
+  public Config setResetAnnealing(int resetAnnealing) {
+    this.resetAnnealing = resetAnnealing;
     return this;
   }
 
@@ -150,6 +162,17 @@ public class Config {
     }
     return outputDir;
 
+  }
+
+  public String getAnnealingType() {
+    if (annealingType == null) {
+      throw new NullPointerException("Annealing type is not set");
+    }
+    return annealingType;
+  }
+
+  public int getResetAnnealing() {
+    return resetAnnealing;
   }
 
   public Float getAlpha() {

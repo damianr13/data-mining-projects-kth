@@ -8,6 +8,7 @@ import se.kth.jabeja.rand.RandNoGenerator;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.util.Calendar;
 import java.util.HashMap;
 
 
@@ -36,8 +37,12 @@ public class Main {
         //read the input graph
         HashMap<Integer, Node> graph = readGraph();
 
+        double startTime = System.currentTimeMillis();
         //start JaBeJa
         startJabeja(graph);
+
+        double duration = System.currentTimeMillis() - startTime;
+        System.out.println("Execution time: " + duration);
     }
 
     /**
