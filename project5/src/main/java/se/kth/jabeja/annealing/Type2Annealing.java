@@ -10,7 +10,6 @@ class Type2Annealing extends AbstractAnnealing {
 
     public void update() {
         T = Math.max(minValue(), T * delta);
-        System.out.println(T);
     }
 
     @Override
@@ -18,10 +17,6 @@ class Type2Annealing extends AbstractAnnealing {
         double acceptanceThreshold = RandNoGenerator.nextDouble();
         double acceptanceProbability = potentialValue > currentValue ?
                 1 : Math.exp((potentialValue - currentValue) / currentTemperature());
-        if (acceptanceProbability > acceptanceThreshold) {
-            System.out.printf("Current value: %f, Potential value: %f, Threshold: %f, probability: %f\n",
-                    currentValue, potentialValue, acceptanceThreshold, acceptanceProbability);
-        }
         return acceptanceProbability > acceptanceThreshold;
     }
 

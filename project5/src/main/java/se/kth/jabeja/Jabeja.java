@@ -139,9 +139,9 @@ public class Jabeja implements ColorEventListener {
    * @return how many neighbors of the node have color == colorId
    */
   private int getDegree(Node node, int colorId){
-//    if (node.getNeighbourColorCount(colorId) != Node.UNKNOWN_COLOR_COUNT) {
-//      return node.getNeighbourColorCount(colorId);
-//    }
+    if (node.getNeighbourColorCount(colorId) != Node.UNKNOWN_COLOR_COUNT) {
+      return node.getNeighbourColorCount(colorId);
+    }
 
     int degree = 0;
     for(int neighborId : node.getNeighbours()){
@@ -151,7 +151,7 @@ public class Jabeja implements ColorEventListener {
       }
     }
 
-//    node.learnColorMap(colorId, degree);
+    node.learnColorMap(colorId, degree);
     return degree;
   }
 

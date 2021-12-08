@@ -31,8 +31,8 @@ public class Node {
 	}
 
 	public void setColor(int color) {
-//		colorEventListenerList.forEach(l ->
-//			this.neighbours.forEach(n -> l.notifyChangedColor(n, this.color, color)));
+		colorEventListenerList.forEach(l ->
+			this.neighbours.forEach(n -> l.notifyChangedColor(n, this.color, color)));
 
 		this.color = color;
 	}

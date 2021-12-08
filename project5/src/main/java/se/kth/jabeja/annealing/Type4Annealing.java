@@ -1,7 +1,10 @@
 package se.kth.jabeja.annealing;
 
-import se.kth.jabeja.rand.RandNoGenerator;
-
+/**
+ * Custom annealing method
+ * It starts with an acceptable difference for which a swap is accepted. This acceptable difference drops over the
+ * passage of rounds, eventually reaching 0 and settling 0. The step of decreasing is defined by the parameter delta.
+ */
 class Type4Annealing extends AbstractAnnealing {
 
     public Type4Annealing(double t, double delta) {
