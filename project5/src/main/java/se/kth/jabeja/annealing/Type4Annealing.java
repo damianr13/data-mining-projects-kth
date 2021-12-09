@@ -18,7 +18,7 @@ class Type4Annealing extends AbstractAnnealing {
 
     @Override
     public boolean shouldAcceptSolution(double currentValue, double potentialValue) {
-        return potentialValue + T > currentValue;
+        return potentialValue + T >= currentValue;
     }
 
     @Override

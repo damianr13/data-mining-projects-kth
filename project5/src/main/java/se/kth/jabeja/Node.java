@@ -85,5 +85,5 @@ public class Node {
 	}
 }
 
-//	Execution time: 466072.0
+//	Execution time: 466072
 //	Execution time: 1571729
