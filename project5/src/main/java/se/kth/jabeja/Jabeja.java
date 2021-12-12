@@ -21,6 +21,7 @@ public class Jabeja implements ColorEventListener {
   private int round;
   private boolean resultFileCreated = false;
   private AbstractAnnealing annealing;
+  private long startTime;
 
   //-------------------------------------------------------------------
   public Jabeja(HashMap<Integer, Node> graph, Config config) {
@@ -30,6 +31,8 @@ public class Jabeja implements ColorEventListener {
     this.numberOfSwaps = 0;
     this.config = config;
     this.annealing = AbstractAnnealing.fromConfig(config);
+
+    this.startTime = System.currentTimeMillis();
   }
 
 
@@ -285,12 +288,13 @@ public class Jabeja implements ColorEventListener {
       }
       // create folder and result file with header
       String header = "# Migration is number of nodes that have changed color.";
-      header += "\n\nRound" + delimiter + "Edge-Cut" + delimiter + "Swaps" + delimiter + "Migrations" + delimiter + "Skipped" + "\n";
+      header += "\n\nRound" + delimiter + "Edge-Cut" + delimiter + "Swaps" + delimiter + "Migrations" + delimiter + "Skipped" + delimiter + "ExecutionTime \n";
       FileIO.write(header, outputFilePath);
       resultFileCreated = true;
     }
 
-    FileIO.append(round + delimiter + (edgeCuts) + delimiter + numberOfSwaps + delimiter + migrations + "\n", outputFilePath);
+    long executionTime = System.currentTimeMillis() - startTime;
+    FileIO.append(round + delimiter + (edgeCuts) + delimiter + numberOfSwaps + delimiter + migrations + delimiter + executionTime + "\n", outputFilePath);
   }
 
   @Override
