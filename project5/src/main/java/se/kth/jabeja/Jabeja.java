@@ -107,21 +107,25 @@ public class Jabeja implements ColorEventListener {
     for (int candidateId: nodes) {
       Node candidate = entireGraph.get(candidateId);
       if (candidate.getColor() == nodep.getColor()) {
-        // no exchange can be performed, skip
+        // same color --> no exchange can be performed, skip
         continue;
       }
 
-      int targetDegree = getDegree(nodep, nodep.getColor());
-      int candidateDegree = getDegree(candidate, candidate.getColor());
+      // exchange their colors only if this exchange decreases their energy...
+      // --> increases the number of neighbors with a similar color to that of the node
 
-      int potentialTargetDegree = getDegree(nodep, candidate.getColor());
-      int potentialCandidateDegree = getDegree(candidate, nodep.getColor());
+      int targetDegree = getDegree(nodep, nodep.getColor()); // how many neighbors of the node have color == color of node
+      int candidateDegree = getDegree(candidate, candidate.getColor()); // how many neighbors of the candidate have color == color of candidate
+
+      int potentialTargetDegree = getDegree(nodep, candidate.getColor()); // how many neighbors of the node have color == color of candidate
+      int potentialCandidateDegree = getDegree(candidate, nodep.getColor()); // how many neighbors of the candidate have color == color of node
 
       double oldSameColorDegree = Math.pow(targetDegree, config.getAlpha())
               + Math.pow(candidateDegree, config.getAlpha());
       double potentialSameColorDegree = Math.pow(potentialTargetDegree, config.getAlpha())
               + Math.pow(potentialCandidateDegree, config.getAlpha());
 
+      // finds best partner... (largest decrease in energy)
       if (annealing.shouldAcceptSolution(oldSameColorDegree, potentialSameColorDegree)
               && potentialSameColorDegree > highestBenefit) {
         bestPartner = candidate;

@@ -40,11 +40,9 @@ for f in files:
 			for key in keys[::-1]:
 				if paramIndex[key] == len(paramMap[key]) - 1:
 					paramIndex[key] = 0
-				else: 
+				else:
 					finished = False
 					paramIndex[key] += 1
 
-		for currentArgs in args: 
+		for currentArgs in args:
 			subprocess.run(['./run.sh', f'-graph graphs/{f} {currentArgs}'])
-
-
