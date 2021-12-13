@@ -16,8 +16,9 @@ results = {}
 for fileName in fileNames:
     for annealingType in annealingTypes:
 
-        swaps[fileName][annealingType] = {}
-        edgecut[fileName][annealingType] = {}
+        if not annealingType in swaps[fileName]:
+            swaps[fileName][annealingType] = {}
+            edgecut[fileName][annealingType] = {}
 
         filePattern = f'.*{fileName}.*{annealingType}.*'
         regex = re.compile(filePattern)
@@ -26,15 +27,15 @@ for fileName in fileNames:
         fileForBestValue = ''
         for root, dirs, files in os.walk('output'):
             for file in files:
-                file_D = re.findall("D_\d+\.?\d*", file)[0]
-                print(file_D)
-
-                swaps[fileName][annealingType][file_D] = []
-                edgecut[fileName][annealingType][file_D] = []
-
                 if regex.match(file):
                     with open(f'output/{file}') as f:
-                        print('yes')
+                        file_D = re.findall("D_\d+\.?\d*", file)[0]
+                        # print(file_D)
+
+                        if not file_D in swaps[fileName][annealingType]:
+                            swaps[fileName][annealingType][file_D] = []
+                            edgecut[fileName][annealingType][file_D] = []
+                        # print('yes')
                         file_lines = f.readlines()[3:]
 
                         current = min([int(re.sub('\\s+', ' ', x).split(' ')[1]) for x in file_lines])
@@ -58,4 +59,5 @@ print('\n\n')
 pprint(results)
 print('\n\n')
 
-pprint(edgecut['3elt.graph']['TYPE1'])
+edgecutForFile = edgecut['3elt.graph']['TYPE1']
+pprint([(key, len(edgecutForFile[key])) for key in edgecutForFile])
