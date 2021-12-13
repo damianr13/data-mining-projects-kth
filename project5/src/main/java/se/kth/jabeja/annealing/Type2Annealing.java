@@ -6,7 +6,7 @@ class Type2Annealing extends AbstractAnnealing {
 
     public Type2Annealing(double t, double delta) {
         super(Math.min(t, 1), delta);
-    }
+    } // the maximum initial temperature is 1
 
     public void update() {
         T = Math.max(minValue(), T * delta);
